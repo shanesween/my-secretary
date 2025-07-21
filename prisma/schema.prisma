@@ -1,0 +1,146 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth.js required models
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model User {
+  id            String     @id @default(cuid())
+  name          String?
+  email         String     @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  
+  // MySecretary specific fields
+  contractors   Contractor[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// MySecretary specific models
+model Contractor {
+  id            String   @id @default(cuid())
+  businessName  String
+  ownerName     String
+  phoneNumber   String   @unique
+  email         String?
+  industry      String   // e.g., "plumbing", "electrical", "hvac"
+  twilioNumber  String?  // The forwarding number
+  
+  // Service plan
+  plan          ServicePlan @default(STARTER)
+  isActive      Boolean     @default(true)
+  
+  // Relationships
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  callLogs      CallLog[]
+  clients       Client[]
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Client {
+  id            String   @id @default(cuid())
+  name          String?
+  phoneNumber   String
+  email         String?
+  notes         String?
+  
+  // Relationships
+  contractorId  String
+  contractor    Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  callLogs      CallLog[]
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  
+  @@unique([contractorId, phoneNumber])
+}
+
+model CallLog {
+  id            String   @id @default(cuid())
+  
+  // Call details
+  callSid       String?  // Twilio call SID
+  fromNumber    String
+  toNumber      String
+  duration      Int?     // in seconds
+  status        CallStatus @default(RECEIVED)
+  
+  // Call content
+  transcript    String?  @db.Text
+  summary       String?  @db.Text
+  aiResponse    String?  @db.Text
+  
+  // Follow-up actions
+  needsFollowUp Boolean  @default(false)
+  followUpSent  Boolean  @default(false)
+  appointmentBooked Boolean @default(false)
+  
+  // Relationships
+  contractorId  String
+  contractor    Contractor @relation(fields: [contractorId], references: [id], onDelete: Cascade)
+  clientId      String?
+  client        Client?    @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+enum ServicePlan {
+  STARTER
+  PRO
+}
+
+enum CallStatus {
+  RECEIVED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
